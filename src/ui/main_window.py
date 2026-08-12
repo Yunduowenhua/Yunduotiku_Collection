@@ -92,11 +92,9 @@ class MainWindow(QMainWindow):
             border-color: #22d3ee;
             color: #001f25;
         }
-        QPushButton#BtnCropActive {
-            background-color: #f59e0b;
-            color: #472a00;
-            border: 1px solid #f59e0b;
-            font-weight: bold;
+        QPushButton#BtnTool {
+            padding: 4px 10px;
+            font-size: 12px;
         }
         QPushButton#PillButton {
             background-color: #171f33;
@@ -315,15 +313,17 @@ class MainWindow(QMainWindow):
         self.lbl_canvas_title = QLabel("🖼️ 原 PDF 页面与切图视窗")
         self.lbl_canvas_title.setStyleSheet("color: #dae2fd; font-weight: bold;")
         
-        # 增加显眼的“拉框重划修正模式”功能按钮
+        # 显眼拉框模式按钮
         self.btn_canvas_crop = QPushButton("✂️ 开启拉框重划模式")
         self.btn_canvas_crop.setStyleSheet("background-color: #06b6d4; color: #003640; font-weight: bold;")
 
-        self.btn_zoom_in = QPushButton("🔍+")
-        self.btn_zoom_in.setFixedWidth(36)
-        self.btn_zoom_out = QPushButton("🔍-")
-        self.btn_zoom_out.setFixedWidth(36)
-        self.btn_zoom_fit = QPushButton("Fit 适合")
+        # 视图缩放控制按钮（移除固定宽限制，增加小工具样式 BtnTool）
+        self.btn_zoom_in = QPushButton("➕ 放大")
+        self.btn_zoom_in.setObjectName("BtnTool")
+        self.btn_zoom_out = QPushButton("➖ 缩小")
+        self.btn_zoom_out.setObjectName("BtnTool")
+        self.btn_zoom_fit = QPushButton("🎯 适合窗口")
+        self.btn_zoom_fit.setObjectName("BtnTool")
 
         self.canvas_toolbar.addWidget(self.lbl_canvas_title)
         self.canvas_toolbar.addWidget(self.btn_canvas_crop)
@@ -579,8 +579,9 @@ class MainWindow(QMainWindow):
     def on_question_selected(self):
         self.image_view.enable_cropping(False)
         self.btn_manual_edit.setText("✂️ 人工修改 (拉框重划)")
-        self.btn_manual_edit.setObjectName("")
+        self.btn_manual_edit.setStyleSheet("background-color: #06b6d4; color: #003640; font-weight: bold;")
         self.btn_canvas_crop.setText("✂️ 开启拉框重划模式")
+        self.btn_canvas_crop.setStyleSheet("background-color: #06b6d4; color: #003640; font-weight: bold;")
 
         items = self.list_questions.selectedItems()
         if not items: return
@@ -606,13 +607,17 @@ class MainWindow(QMainWindow):
     def on_manual_edit_clicked(self):
         self.right_tab_widget.setCurrentIndex(0)
         if not self.pdf_path:
-            QMessageBox.warning(self, "提示", "请先导入 PDF 文件后再进行拉框修正！")
+            QMessageBox.warning(self, "操作提示", "请先点击顶部【📂 导入 PDF 并启动解析】选择 PDF 文件！")
             return
 
         items = self.list_questions.selectedItems()
         if not items:
-            QMessageBox.warning(self, "提示", "请先在左侧列表中选中需要拉框修正的题目！")
-            return
+            if self.list_questions.count() > 0:
+                self.list_questions.setCurrentRow(0)
+                items = self.list_questions.selectedItems()
+            else:
+                QMessageBox.warning(self, "操作提示", "当前没有可用于拉框重划的题目！")
+                return
 
         data = items[0].data(Qt.UserRole)
         page_num = data["page_num"]
@@ -622,6 +627,7 @@ class MainWindow(QMainWindow):
         backend.load(self.pdf_path)
         page_info = backend.get_page(page_num)
 
+        # 渲染当前整页高清大图供用户拖划选区
         pix = page_info.page.get_pixmap(matrix=fitz.Matrix(150/72.0, 150/72.0))
         img = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888)
         self.current_page_pixmap = QPixmap.fromImage(img)
@@ -631,12 +637,16 @@ class MainWindow(QMainWindow):
         ))
         backend.close()
 
+        # 激活 CropperLabel 画布裁切
         self.image_view.enable_cropping(True)
         
-        # 给按钮显著的激活反馈样式
+        # 显著的高亮发光激活样式 (琥珀金亮色)
+        active_btn_style = "background-color: #f59e0b; color: #000000; font-weight: bold;"
         self.btn_manual_edit.setText("✂️ 划框模式已激活 (请在左图拖拽)")
+        self.btn_manual_edit.setStyleSheet(active_btn_style)
         self.btn_canvas_crop.setText("✂️ 划框模式已激活 (请在左图拖拽)")
-        self.lbl_progress.setText(f"拉框重划模式已激活：请在左侧 PDF 图片上直接按住鼠标左键拖拽划框 (第 {page_num+1} 页)")
+        self.btn_canvas_crop.setStyleSheet(active_btn_style)
+        self.lbl_progress.setText(f"⚠️ 拉框重划模式已激活：请在左侧 PDF 整页大图上直接按住鼠标左键拖拽选区 (第 {page_num+1} 页)")
 
     def on_confirm_clicked(self):
         self.right_tab_widget.setCurrentIndex(0)
@@ -761,7 +771,7 @@ class MainWindow(QMainWindow):
             <ol>
                 <li><b>选择题目</b>：在左侧列表中点击要重划的题目。</li>
                 <li><b>激活重划模式</b>：点击中间视窗顶部的【✂️ 开启拉框重划模式】或右侧面板【✂️ 人工修改 (拉框重划)】按钮。</li>
-                <li><b>拖划选区</b>：此时左侧原 PDF 视图会自动载入当前整页高清大图，光标变为十字，按住<b>鼠标左键拖拽框选</b>目标题目/表格区域。</li>
+                <li><b>拖划选区</b>：此时左侧原 PDF 视图会自动载入当前整页高清大图，外框高亮发黄，光标变为十字，按住<b>鼠标左键拖拽框选</b>目标题目/表格区域。</li>
                 <li><b>自动识别落盘</b>：松开鼠标后系统自动截取新图片并进行 RapidOCR 识别，完成后弹出成功提示并保存。</li>
             </ol>
         </body>

@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import QLabel, QRubberBand
 from PySide6.QtCore import Qt, Signal, QRect, QPoint
-from PySide6.QtGui import QMouseEvent, QPainter, QPen, QColor
+from PySide6.QtGui import QMouseEvent
 
 class CropperLabel(QLabel):
     crop_requested = Signal(QRect)
@@ -12,8 +12,8 @@ class CropperLabel(QLabel):
         self.is_cropping = False
         self.setStyleSheet("""
             QRubberBand {
-                border: 2px solid #06b6d4;
-                background-color: rgba(6, 182, 212, 0.25);
+                border: 2px solid #f59e0b;
+                background-color: rgba(245, 158, 11, 0.3);
             }
         """)
 
@@ -22,8 +22,18 @@ class CropperLabel(QLabel):
         if not enable:
             self.rubber_band.hide()
             self.setCursor(Qt.ArrowCursor)
+            self.setStyleSheet("""
+                background-color: #0b1326;
+                border: 1px solid #334155;
+                border-radius: 4px;
+            """)
         else:
             self.setCursor(Qt.CrossCursor)
+            self.setStyleSheet("""
+                background-color: #0b1326;
+                border: 3px solid #f59e0b;
+                border-radius: 4px;
+            """)
 
     def mousePressEvent(self, event: QMouseEvent):
         if self.is_cropping and event.button() == Qt.LeftButton:
@@ -42,7 +52,10 @@ class CropperLabel(QLabel):
             rect = self.rubber_band.geometry()
             self.rubber_band.hide()
             self.origin = QPoint()
+            
+            # 只有当框选的区域宽度与高度均 > 10 像素时，才算作有效重划
             if rect.width() > 10 and rect.height() > 10:
                 self.crop_requested.emit(rect)
+                
             self.enable_cropping(False)
         super().mouseReleaseEvent(event)

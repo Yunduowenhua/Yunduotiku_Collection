@@ -2,7 +2,8 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QPushButton, QLabel, QListWidget, QSplitter,
     QTabWidget, QTextBrowser, QLineEdit, QComboBox,
-    QTextEdit, QRadioButton, QFrame, QButtonGroup, QListWidgetItem
+    QTextEdit, QRadioButton, QFrame, QButtonGroup, QListWidgetItem,
+    QMessageBox
 )
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QImage, QPixmap, QIcon, QFont
@@ -90,6 +91,12 @@ class MainWindow(QMainWindow):
             background-color: #22d3ee;
             border-color: #22d3ee;
             color: #001f25;
+        }
+        QPushButton#BtnCropActive {
+            background-color: #f59e0b;
+            color: #472a00;
+            border: 1px solid #f59e0b;
+            font-weight: bold;
         }
         QPushButton#PillButton {
             background-color: #171f33;
@@ -305,9 +312,13 @@ class MainWindow(QMainWindow):
 
         # 画布顶端控制栏
         self.canvas_toolbar = QHBoxLayout()
-        self.lbl_canvas_title = QLabel("🖼️ 原 PDF 页面定位与高精切图对比视窗")
+        self.lbl_canvas_title = QLabel("🖼️ 原 PDF 页面与切图视窗")
         self.lbl_canvas_title.setStyleSheet("color: #dae2fd; font-weight: bold;")
         
+        # 增加显眼的“拉框重划修正模式”功能按钮
+        self.btn_canvas_crop = QPushButton("✂️ 开启拉框重划模式")
+        self.btn_canvas_crop.setStyleSheet("background-color: #06b6d4; color: #003640; font-weight: bold;")
+
         self.btn_zoom_in = QPushButton("🔍+")
         self.btn_zoom_in.setFixedWidth(36)
         self.btn_zoom_out = QPushButton("🔍-")
@@ -315,6 +326,7 @@ class MainWindow(QMainWindow):
         self.btn_zoom_fit = QPushButton("Fit 适合")
 
         self.canvas_toolbar.addWidget(self.lbl_canvas_title)
+        self.canvas_toolbar.addWidget(self.btn_canvas_crop)
         self.canvas_toolbar.addStretch()
         self.canvas_toolbar.addWidget(self.btn_zoom_in)
         self.canvas_toolbar.addWidget(self.btn_zoom_out)
@@ -444,20 +456,18 @@ class MainWindow(QMainWindow):
         self.btn_confirm.setStyleSheet("font-size: 14px; padding: 10px;")
 
         self.action_sub_layout = QHBoxLayout()
-        self.btn_manual_edit = QPushButton("✂️ 人工修改 (拉框修正)")
+        # 显眼的人工修改拉框重划按键
+        self.btn_manual_edit = QPushButton("✂️ 人工修改 (拉框重划)")
+        self.btn_manual_edit.setStyleSheet("background-color: #06b6d4; color: #003640; font-weight: bold;")
+
         self.btn_flag_issue = QPushButton("🚩 标记疑难")
         self.action_sub_layout.addWidget(self.btn_manual_edit)
         self.action_sub_layout.addWidget(self.btn_flag_issue)
-
-        # 快捷键 Cheat Sheet 底部卡片
-        self.shortcuts_card = QLabel("⌨️ 快捷键:  Ctrl+Enter 确认本题  |  Ctrl+E 激活拉框修正")
-        self.shortcuts_card.setStyleSheet("color: #869397; font-size: 11px; text-align: center; margin-top: 4px;")
 
         self.right_layout.addWidget(self.meta_card)
         self.right_layout.addWidget(self.form_card, stretch=1)
         self.right_layout.addWidget(self.btn_confirm)
         self.right_layout.addLayout(self.action_sub_layout)
-        self.right_layout.addWidget(self.shortcuts_card)
 
         self.right_tab_widget.addTab(self.right_panel, "📋 审校工作台")
 
@@ -479,6 +489,7 @@ class MainWindow(QMainWindow):
         self.btn_export.clicked.connect(self.on_export_clicked)
         self.list_questions.itemSelectionChanged.connect(self.on_question_selected)
         self.btn_manual_edit.clicked.connect(self.on_manual_edit_clicked)
+        self.btn_canvas_crop.clicked.connect(self.on_manual_edit_clicked)
         self.btn_confirm.clicked.connect(self.on_confirm_clicked)
         self.image_view.crop_requested.connect(self.on_crop_requested)
         self.search_input.textChanged.connect(self.filter_question_list)
@@ -488,7 +499,6 @@ class MainWindow(QMainWindow):
         self.btn_zoom_out.clicked.connect(lambda: self.zoom_image(0.8))
         self.btn_zoom_fit.clicked.connect(self.zoom_fit)
 
-        self._bind_shortcuts()
         self.worker = None
         self.crop_worker = None
 
@@ -496,18 +506,6 @@ class MainWindow(QMainWindow):
         self.current_page_num = -1
         self.current_page_pixmap = None
         self.zoom_factor = 1.0
-
-    def _bind_shortcuts(self):
-        """T-P5-4: 快捷键绑定与操作状态机映射"""
-        from PySide6.QtGui import QShortcut, QKeySequence
-
-        self.shortcut_edit = QShortcut(QKeySequence("Ctrl+E"), self)
-        self.shortcut_edit.setContext(Qt.ApplicationShortcut)
-        self.shortcut_edit.activated.connect(self.on_manual_edit_clicked)
-
-        self.shortcut_confirm = QShortcut(QKeySequence("Ctrl+Return"), self)
-        self.shortcut_confirm.setContext(Qt.ApplicationShortcut)
-        self.shortcut_confirm.activated.connect(self.on_confirm_clicked)
 
     def on_import_clicked(self):
         from PySide6.QtWidgets import QFileDialog
@@ -575,12 +573,15 @@ class MainWindow(QMainWindow):
         self.lbl_progress.setText("解析完成！请在列表中选择题目进行校验。")
 
     def on_parsing_error(self, err: str):
-        from PySide6.QtWidgets import QMessageBox
         self.btn_import.setEnabled(True)
         QMessageBox.critical(self, "解析错误", f"发生异常: {err}")
 
     def on_question_selected(self):
         self.image_view.enable_cropping(False)
+        self.btn_manual_edit.setText("✂️ 人工修改 (拉框重划)")
+        self.btn_manual_edit.setObjectName("")
+        self.btn_canvas_crop.setText("✂️ 开启拉框重划模式")
+
         items = self.list_questions.selectedItems()
         if not items: return
         item = items[0]
@@ -605,11 +606,12 @@ class MainWindow(QMainWindow):
     def on_manual_edit_clicked(self):
         self.right_tab_widget.setCurrentIndex(0)
         if not self.pdf_path:
-            self.lbl_progress.setText("提示：请先导入 PDF 文件后再按 Ctrl+E 进行重划修正。")
+            QMessageBox.warning(self, "提示", "请先导入 PDF 文件后再进行拉框修正！")
             return
+
         items = self.list_questions.selectedItems()
         if not items:
-            self.lbl_progress.setText("提示：请先在右侧列表中选中需要重划修正的题目。")
+            QMessageBox.warning(self, "提示", "请先在左侧列表中选中需要拉框修正的题目！")
             return
 
         data = items[0].data(Qt.UserRole)
@@ -630,14 +632,19 @@ class MainWindow(QMainWindow):
         backend.close()
 
         self.image_view.enable_cropping(True)
-        self.lbl_progress.setText(f"拉框重划模式已激活：请在左侧图片上拖拽鼠标划框 (第 {page_num+1} 页)")
+        
+        # 给按钮显著的激活反馈样式
+        self.btn_manual_edit.setText("✂️ 划框模式已激活 (请在左图拖拽)")
+        self.btn_canvas_crop.setText("✂️ 划框模式已激活 (请在左图拖拽)")
+        self.lbl_progress.setText(f"拉框重划模式已激活：请在左侧 PDF 图片上直接按住鼠标左键拖拽划框 (第 {page_num+1} 页)")
 
     def on_confirm_clicked(self):
         self.right_tab_widget.setCurrentIndex(0)
         items = self.list_questions.selectedItems()
         if not items:
-            self.lbl_progress.setText("提示：请先在列表中选中要确认的题目。")
+            QMessageBox.warning(self, "提示", "请先在列表中选中要确认的题目！")
             return
+
         item = items[0]
         data = item.data(Qt.UserRole)
         q_id = data["q_id"]
@@ -661,7 +668,6 @@ class MainWindow(QMainWindow):
         self.lbl_progress.setText(f"本题 [{q_id}] 已确认提交！")
 
     def on_export_clicked(self):
-        from PySide6.QtWidgets import QMessageBox
         QMessageBox.information(self, "数据导出", "已成功导出结构化 JSONL, SQLite 数据库及 PNG 切图包至 dist/ 目录！")
 
     def on_crop_requested(self, rect):
@@ -717,7 +723,8 @@ class MainWindow(QMainWindow):
                 if item.isSelected():
                     self.on_question_selected()
                 break
-        self.lbl_progress.setText("重划与识别完成！已标为已修改状态。")
+        self.lbl_progress.setText("重划与识别完成！已更新切图与文本。")
+        QMessageBox.information(self, "重划成功", f"题目 [{q_id}] 区域已成功更新重新识别！")
 
     def zoom_image(self, factor: float):
         self.zoom_factor *= factor
@@ -750,25 +757,13 @@ class MainWindow(QMainWindow):
             </style>
         </head>
         <body>
-            <h2>🚀 Stitch 极速审校流说明</h2>
+            <h2>🚀 极速拉框重划修正操作指南</h2>
             <ol>
-                <li><b>导入与自动分流</b>：点击顶部【📂 导入 PDF 并启动解析】，原生页与扫描页自动路由识别。</li>
-                <li><b>三栏定位与比对</b>：左侧列表双击切题，中间实时展示原页框选与高精切图。</li>
-                <li><b>快捷拉框重划</b>：快捷键 <span class="kbd">Ctrl+E</span> 激活划框，鼠标拖拽生成精准新切图。</li>
-                <li><b>结构化编辑与提交</b>：勾选 A/B/C/D 正确答案，<span class="kbd">Ctrl+Enter</span> 一键提交。</li>
+                <li><b>选择题目</b>：在左侧列表中点击要重划的题目。</li>
+                <li><b>激活重划模式</b>：点击中间视窗顶部的【✂️ 开启拉框重划模式】或右侧面板【✂️ 人工修改 (拉框重划)】按钮。</li>
+                <li><b>拖划选区</b>：此时左侧原 PDF 视图会自动载入当前整页高清大图，光标变为十字，按住<b>鼠标左键拖拽框选</b>目标题目/表格区域。</li>
+                <li><b>自动识别落盘</b>：松开鼠标后系统自动截取新图片并进行 RapidOCR 识别，完成后弹出成功提示并保存。</li>
             </ol>
-
-            <h2>⌨️ 核心快捷键</h2>
-            <ul>
-                <li><span class="kbd">Ctrl + E</span>：激活拉框重划修正模式</li>
-                <li><span class="kbd">Ctrl + Enter</span>：确认提交本题</li>
-            </ul>
-
-            <h2>🔒 数据心血防覆盖保护</h2>
-            <div class="card">
-                一旦对题目进行了编辑，系统将在数据库中标记 <span class="tag">manual_edited=True</span>。<br/>
-                即使重新运行大批次解析，也<b>绝对不会覆盖</b>您的人工审校成果。
-            </div>
         </body>
         </html>
         """
